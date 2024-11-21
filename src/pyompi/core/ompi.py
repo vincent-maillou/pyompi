@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 
-from py_compile import ArrayLike
+from pyompi import ArrayLike
 
 class OMPI(ABC):
     @abstractmethod

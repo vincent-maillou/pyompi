@@ -1,7 +1,13 @@
 # Copyright 2023-2024 ETH Zurich and Quantum Transport Toolbox authors.
 
 from pyompi.core import OMPI
-from pyinla import MPI_AVAILABLE, ArrayLike, comm_rank
+from pyompi import MPI_AVAILABLE, MPI_GPU_AWARE, ArrayLike
+from pyompi.utils.gpu import get_host, get_device
+
+if MPI_AVAILABLE:
+    import mpi4py.MPI as MPI
+    comm = MPI.COMM_WORLD
+    comm_rank = comm.Get_rank()
 
 class MPI(OMPI):
     def print_msg(*args, **kwargs):
@@ -27,10 +33,9 @@ class MPI(OMPI):
         comm, optional:
             The communication group to synchronize. Default is MPI.COMM_WORLD.
         """
-        if MPI_AVAILABLE:
-            if comm is None:
-                comm = MPI.COMM_WORLD
-            comm.Barrier()
+        if comm is None:
+            comm = MPI.COMM_WORLD
+        comm.Barrier()
 
     def allreduce(
         sendbuf: ArrayLike,
@@ -52,11 +57,23 @@ class MPI(OMPI):
         comm (MPI.Comm), optional:
             The communication group. Default is MPI.COMM_WORLD.
         """
-        if MPI_AVAILABLE:
-            if comm is None:
-                comm = MPI.COMM_WORLD
-            if op == "sum":
-                comm.Allreduce(sendbuf, recvbuf, op=MPI.SUM)
+        if comm is None:
+            comm = MPI.COMM_WORLD
+            
+        if MPI_GPU_AWARE:
+            ...
+        else:
+            sendbuf = get_host(sendbuf)
+            recvbuf = get_host(recvbuf)
+        
+        if op == "sum":
+            comm.Allreduce(sendbuf, recvbuf, op=MPI.SUM)
+
+        if MPI_GPU_AWARE:
+            ...
+        else:
+            recvbuf = get_device(recvbuf)
+            
 
     def bcast(
         data: ArrayLike,
@@ -75,7 +92,6 @@ class MPI(OMPI):
         comm (MPI.Comm), optional:
             The communication group. Default is MPI.COMM_WORLD.
         """
-        if MPI_AVAILABLE:
-            if comm is None:
-                comm = MPI.COMM_WORLD
-            comm.Bcast(data, root=root)
+        if comm is None:
+            comm = MPI.COMM_WORLD
+        comm.Bcast(data, root=root)
