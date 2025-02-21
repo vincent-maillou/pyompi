@@ -1,4 +1,4 @@
-from pyompi import OCOMM
+from pyocomm import OCOMM
 
 class ONCCL(OCOMM):
     ...

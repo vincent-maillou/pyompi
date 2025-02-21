@@ -1,15 +1,21 @@
-# Copyright 2023-2024 ETH Zurich and Quantum Transport Toolbox authors.
 
-from abc import ABC, abstractmethod
 from numpy.typing import ArrayLike
 
-class OCOMM(ABC):
-    """Base class for communication backends."""
-    def __init__(self):
-        ...
+from pyocomm import OCOMM, backend_flags
+
+if backend_flags["mpi_avail"]:
+    from mpi4py import MPI
+
+class OMPI(OCOMM):
+    """Oblivious MPI communicator."""
+    def __init__(
+            self,
+            comm : MPI.Comm = MPI.COMM_WORLD,
+        ):
+        
+        self.comm = comm
 
     # Point-to-point communication (blocking) --------------------------------
-    @abstractmethod
     def send(self, data: ArrayLike, dest: int, tag: int = 0) -> None:
         """
         Send data from one process to another.
@@ -19,9 +25,8 @@ class OCOMM(ABC):
         dest (int): The rank of the destination process.
         tag (int, optional): The message tag. Defaults to 0.
         """
-        pass
+        self.comm.send(data, dest=dest, tag=tag)
 
-    @abstractmethod
     def recv(self, buf: ArrayLike, source: int, tag: int = 0) -> None:
         """
         Receive data from another process.
@@ -31,13 +36,12 @@ class OCOMM(ABC):
         source (int): The rank of the source process.
         tag (int, optional): The message tag. Defaults to 0.
         """
-        pass
+        self.comm.recv(buf, source=source, tag=tag)
 
     # Point-to-point communication (non-blocking) -----------------------------
     ...
 
-    # Collective communication ------------------------------------------------
-    @abstractmethod
+    # Collective communication (blocking) -------------------------------------
     def bcast(self, data: ArrayLike, root: int = 0) -> ArrayLike:
         """
         Broadcast data from one process to all others.
@@ -49,9 +53,9 @@ class OCOMM(ABC):
         Returns:
         ArrayLike: The broadcasted data.
         """
-        pass
+        self.comm.bcast(data, root=root)
+        return data
 
-    @abstractmethod
     def scatter(self, send_data: ArrayLike, recv_data: ArrayLike, root: int = 0) -> None:
         """
         Scatter data from one process to all others.
@@ -61,9 +65,8 @@ class OCOMM(ABC):
         recv_data (ArrayLike): The buffer to receive the scattered data.
         root (int, optional): The rank of the root process. Defaults to 0.
         """
-        pass
+        self.comm.scatter(send_data, recv_data, root=root)
 
-    @abstractmethod
     def gather(self, send_data: ArrayLike, recv_data: ArrayLike, root: int = 0) -> None:
         """
         Gather data from all processes to one.
@@ -73,9 +76,8 @@ class OCOMM(ABC):
         recv_data (ArrayLike): The buffer to receive the gathered data.
         root (int, optional): The rank of the root process. Defaults to 0.
         """
-        pass
+        self.comm.gather(send_data, recv_data, root=root)
 
-    @abstractmethod
     def allgather(self, send_data: ArrayLike, recv_data: ArrayLike) -> None:
         """
         Gather data from all processes to all.
@@ -84,9 +86,8 @@ class OCOMM(ABC):
         send_data (ArrayLike): The data to send.
         recv_data (ArrayLike): The buffer to receive the gathered data.
         """
-        pass
+        self.comm.Allgather(send_data, recv_data)
 
-    @abstractmethod
     def reduce(self, send_data: ArrayLike, recv_data: ArrayLike, op: str, root: int = 0) -> None:
         """
         Reduce data from all processes to one.
@@ -97,9 +98,8 @@ class OCOMM(ABC):
         op (str): The reduction operation (e.g., 'sum', 'max').
         root (int, optional): The rank of the root process. Defaults to 0.
         """
-        pass
+        self.comm.Reduce(send_data, recv_data, op=MPI.__dict__[op.upper()], root=root)
 
-    @abstractmethod
     def allreduce(self, send_data: ArrayLike, recv_data: ArrayLike, op: str) -> None:
         """
         Reduce data from all processes to all.
@@ -109,9 +109,8 @@ class OCOMM(ABC):
         recv_data (ArrayLike): The buffer to receive the reduced data.
         op (str): The reduction operation (e.g., 'sum', 'max').
         """
-        pass
+        self.comm.Allreduce(send_data, recv_data, op=MPI.__dict__[op.upper()])
 
-    @abstractmethod
     def alltoall(self, send_data: ArrayLike, recv_data: ArrayLike) -> None:
         """
         Send data from all processes to all.
@@ -120,18 +119,19 @@ class OCOMM(ABC):
         send_data (ArrayLike): The data to send.
         recv_data (ArrayLike): The buffer to receive the data.
         """
-        pass
+        self.comm.Alltoall(send_data, recv_data)
+
+    # Collective communication (non-blocking) ---------------------------------
+        ...
 
     # Synchronization ---------------------------------------------------------
-    @abstractmethod
     def barrier(self) -> None:
         """
         Synchronize all processes.
         """
-        pass
+        self.comm.Barrier()
 
-    # Communicators
-    @abstractmethod    
+    # Communicators -----------------------------------------------------------
     def split(self, color: int, key: int) -> 'OCOMM':
         """
         Split the communicator into subgroups.
@@ -143,9 +143,8 @@ class OCOMM(ABC):
         Returns:
         Communicator: A new communicator.
         """
-        pass
+        return OMPI(self.comm.Split(color, key))
 
-    @abstractmethod
     def dup(self) -> 'OCOMM':
         """
         Duplicate the communicator.
@@ -153,10 +152,9 @@ class OCOMM(ABC):
         Returns:
         Communicator: A new communicator.
         """
-        pass
+        return OMPI(self.comm.Dup())
 
     # Process management -------------------------------------------------------
-    @abstractmethod
     def rank(self) -> int:
         """
         Get the rank of the process.
@@ -164,9 +162,8 @@ class OCOMM(ABC):
         Returns:
         int: The rank of the process.
         """
-        pass
+        return self.comm.Get_rank()
 
-    @abstractmethod
     def size(self) -> int:
         """
         Get the size of the communicator.
@@ -174,5 +171,4 @@ class OCOMM(ABC):
         Returns:
         int: The size of the communicator.
         """
-        pass
-
+        return self.comm.Get_size()
